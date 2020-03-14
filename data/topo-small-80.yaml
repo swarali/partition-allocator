@@ -1,0 +1,14 @@
+"rack-0606":
+  "encl-storeblob018":
+    "76": [80, 80, 80, 80]
+    "77": [80, 80, 80, 80]
+    "78": [80, 80, 80, 80]
+  "encl-storeblob019":
+    "84": [80, 80, 80, 80]
+    "85": [80, 80, 80, 80]
+"rack-abcd":
+  "encl-storeblobxyz":
+    "248": [80, 80, 80, 80]
+# No search strategy = 19m 44s
+# Input order, IntDomainMin, partitionAlloc = 9 m 27s
+# inputOrderLBSearch, partitionAlloc = 9 m 27s

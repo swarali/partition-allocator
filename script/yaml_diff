@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+
+normal=$(tput sgr0)
+red=$(tput setaf 1)
+
+# Usage: error ["message"]
+# Example: error "You're Ugly"
+# Output (to STDERR): [ERROR] /script/name: You're Ugly
+error ()
+{
+    printf "%b" "[${red}ERROR${normal}] ${0}: ${1:-'Unkown Error'}\n" >&2
+}
+
+# Usage: fail "message" [exit_code]
+# Example: fail "Unknown Option" 254
+fail ()
+{
+    error "$1"
+
+    case $2 in
+        ''|*[!0-9]*)
+            exit_code=1
+            ;;
+        *)
+            exit_code=$2
+        ;;
+    esac
+
+    exit $exit_code
+}
+
+# Usage: show_help [exit_code]
+# Example: show_help 254
+show_help ()
+{
+    cat <<HELP
+    Usage:
+        $0 [OPTIONS] FILE1 [FILE2]
+
+    OPTIONS:
+        --help, -h:
+            Show this help and exit
+
+        --source-commit, -s:
+            Source commit for the path. Defaults to HEAD if only one file is present.
+
+        --destination-commit, -d:
+            Destination commit for the path. Defaults to the current working tree
+
+        --command, -c:
+            Diff command to be executed on the files. Must be one of [diff, vimdiff, gitdiff]. Defaults to diff.
+
+    Example:
+        $0 zones/zones-zrh1.part zones/new-zones-zrh1.part
+        $0 -s HEAD^ -d HEAD zones/zones-zrh1.part
+
+HELP
+
+    # Fail with general error if status code passed
+    case $1 in
+        ''|*[!0-9]*)
+            exit_code=1
+            ;;
+        *)
+            exit_code=$1
+        ;;
+    esac
+
+    exit $exit_code
+}
+
+argument_expected()
+{
+    fail "$1 expected an argument"
+}
+
+finally()
+{
+    basename=$( basename $0 )
+    pretty_source_file=$( mktemp -t ${basename})
+    if [ -z $source_commit ]; then
+      cat $file_path1 | python -m pyaml > $pretty_source_file
+    else
+      git show $source_commit:$file_path1 | python -m pyaml > $pretty_source_file
+    fi
+
+    pretty_destination_file=$( mktemp -t ${basename})
+    if [ -z $destination_commit ]; then
+        cat $file_path2 | python -m pyaml > $pretty_destination_file
+    else
+        git show $destination_commit:$file_path2 | python -m pyaml > $pretty_destination_file
+    fi
+
+    $diff_command $pretty_source_file $pretty_destination_file
+
+    rm $pretty_source_file
+    rm $pretty_destination_file
+}
+
+check_args()
+{
+    file_path1=""
+    file_path2=""
+    source_commit=""
+    destination_commit=""
+    diff_command="diff -u"
+    while [ ! -z "$1" ]; do
+        local arg="$1"
+        case "$1" in
+            -h|--help)
+                local help=0
+                shift
+                ;;
+            -s|--source-commit)
+                shift
+
+                if [ -z $1 ] || [[ "$1" == -* ]]; then
+                    argument_expected $arg
+                fi
+
+                source_commit=$1
+                shift
+                ;;
+            -d|--destination-commit)
+                shift
+
+                if [ -z $1 ] || [[ "$1" == -* ]]; then
+                    argument_expected $arg
+                fi
+
+                destination_commit=$1
+                shift
+                ;;
+            -c|--command)
+                shift
+
+                if [ -z $1 ] || [[ "$1" == -* ]]; then
+                  argument_expected $arg
+                fi
+
+                case "$1" in
+                    diff)
+                      # Default
+                      ;;
+                    vimdiff)
+                      diff_command="vimdiff"
+                      ;;
+                    gitdiff)
+                      diff_command="git diff --no-index"
+                      ;;
+                    *)
+                      fail "Unknown command $1"
+                esac
+
+                shift
+                ;;
+            *)
+                if [ ! -z $file_path2 ] || [[ "$arg" == -* ]]; then
+                    fail "Unknown option $arg"
+                elif [ ! -z $file_path1 ]; then
+                    file_path2=$arg
+                else
+                    file_path1=$arg
+                fi
+
+                shift
+                ;;
+        esac
+    done
+
+    if [ ! -z $help ]; then
+        show_help $help
+        exit 0
+    fi
+
+    if [ -z $file_path1 ]; then
+        fail "Atleast a single file is required"
+    fi
+
+    if [ -z $file_path2 ]; then
+        file_path2=$file_path1
+        if [ -z $source_commit ]; then
+          source_commit=HEAD
+        fi
+    fi
+
+    finally
+
+    exit 0
+}
+
+main()
+{
+    if [ -z $1 ]; then
+        show_help
+    fi
+
+    check_args "$@"
+}
+
+main "$@"
+
